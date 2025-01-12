@@ -1,234 +1,209 @@
-import { ThemedView } from "@/components/ThemedView";
-import { Ionicons } from "@expo/vector-icons";
-import { Stack, useLocalSearchParams, useRouter } from "expo-router";
-import { DimensionValue, Image, StyleSheet, TouchableHighlight, View, Text} from "react-native";
-import TextRecognition, { TextBlock, TextRecognitionScript } from '@react-native-ml-kit/text-recognition';
-import React, { useEffect } from "react";
+import { View, StyleSheet, Image, Dimensions } from 'react-native';
+import { useLocalSearchParams } from 'expo-router';
 import { ReactNativeZoomableView } from '@openspacelabs/react-native-zoomable-view';
-import { analyse } from "@/utils/jpdb";
-import { TouchableOpacity } from "react-native";
-import { ScrollView } from "react-native";
-import { HorizontalFittingText } from "@/components/HozontalFittingText";
-import { VerticalFittingText } from "@/components/VerticalFittingText";
+import axios from 'axios';
+import { useState, useEffect } from 'react';
+import { ThemedView } from '@/components/ThemedView';
+import { ThemedText } from '@/components/ThemedText';
 
-const nonHiraganaRegex = /^[^一-龠ぁ-ゔァ-ヴー々〆〤ヶ]+$/u
+const SERVER_URL = 'http://192.168.50.219:3001';
 
-function determinePOSColor(pos: string): string{
-  // if (pos === "Particle") return "#BF4F4F" // darker light red
-  // if (pos === "Proper noun") return "#4F70BF" // darker light blue
-  // if (pos === "Noun") return "#4F8FBF" // darker light aqua
-  // if (pos.startsWith("Verb")) return "#3FBF3F" // darker light green
-  // if (pos.startsWith("Adjective")) return "#9F4FBF" // darker light purple
-  // if (pos === "Adverb") return "#8FBF4F" // darker light lime
-  // if (pos === "Pronoun") return "#EF9F4F" // darker light yellow
-  return "#232323" // darker light gray
+type ViewerParams = {
+  photoPath: string;
+};
+
+interface TextBlock {
+  text: string;
+  confidence: number;
+  boundingBox: {
+    vertices: Array<{
+      x: number;
+      y: number;
+    }>;
+  };
 }
 
-export default function ViewerScreen(){
-  const {photoPath} = useLocalSearchParams();
-  const [blocks, setBlocks] = React.useState<TextBlock[]>([])
-  const [imageDimensions, setImageDimensions] = React.useState({width: 0, height: 0})
-  const [overlay, setOverlay] = React.useState(<></>)
-  const [details, setDetails] = React.useState(<></>)
-  const [isDetailsVisible, setIsDetailsVisible] = React.useState(false)
+interface OCRResponse {
+  text: string;
+  confidence: number;
+  imageUrl: string;
+  blocks: TextBlock[];
+  imageWidth: number;
+  imageHeight: number;
+}
+
+export default function ViewerScreen() {
+  const { photoPath } = useLocalSearchParams<ViewerParams>();
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [result, setResult] = useState<OCRResponse | null>(null);
 
   useEffect(() => {
-    setIsDetailsVisible(React.Children.count(details.props.children) > 0)
-  }, [details])
+    const processImage = async () => {
+      try {
+        setLoading(true);
+        setError(null);
 
-  const router = useRouter();
+        const formData = new FormData();
+        formData.append('image', {
+          uri: photoPath,
+          type: 'image/jpeg',
+          name: 'photo.jpg',
+        } as any);
 
-  const handleReturnButton = () => {
-    router.push({pathname: "/"})
+        const response = await axios.post(`${SERVER_URL}/ocr`, formData, {
+          headers: {
+            'Content-Type': 'multipart/form-data',
+          },
+        });
+
+        setResult(response.data);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Failed to process image');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    if (photoPath) {
+      processImage();
+    }
+  }, [photoPath]);
+
+  if (!photoPath) {
+    return (
+      <ThemedView style={styles.container}>
+        <ThemedText>No image available</ThemedText>
+      </ThemedView>
+    );
   }
 
-  const handleTextPress = async (text: string, displayLoading = true) => {
-    text = text.replaceAll(/[^一-龠ぁ-ゔァ-ヴー々〆〤ヶ。、！？!]/g, '')
-    //TODO Set details to loading
-    if (displayLoading) {
-      setDetails(
-        <View><Text style={{fontSize: 20}}>Loading...</Text></View>
-      )
-    }
-    const [words, translation] = await analyse(text)
-    console.log(text)
-    console.log(translation)
-    console.log('Output', JSON.stringify(words))
-    const elements = []
-    for (let [i, word] of words.entries()) {
-      const wordElements = []
-      const color = determinePOSColor(word.partsOfSpeaches[0])
-      for (let [j, fragment] of word.fragments.entries()) {
-        wordElements.push(
-          <View key={j} style= {{alignItems: "center"}}>
-            <Text style={{fontSize: 15, color: color}}>{fragment.furigana}</Text>
-            <Text style={{fontSize: 30, color: color}}>{fragment.original}</Text>
-          </View>
-        )
-      }
-      elements.push(<View key={i} style={{flexDirection: "row"}}>{wordElements}</View>)
-    }
-    setDetails(
-      <View style={{flexDirection:"column", justifyContent: "center" }}>
-        <View style={{flexDirection: "row"}}>
-          {elements}
-        </View>
-        {/* <View style={{flex: 1, alignContent: "flex-start"}}>
-          <Text style={{fontSize: 20}}>{translation}</Text>
-        </View> */}
-      </View>
-    )
-    if (translation === "Translating..."){
-      setTimeout(() => {
-        handleTextPress(text, displayLoading = false)
-      }, 1000)
-    }
+  if (loading) {
+    return (
+      <ThemedView style={styles.container}>
+        <ThemedText>Processing image...</ThemedText>
+      </ThemedView>
+    );
   }
 
-  // recognize text and set blocks
-  useEffect(
-    () => {
-      Image.getSize(`file://${photoPath}`, (width, height) => {
-        setImageDimensions({width, height})
-      })
+  if (error || !result) {
+    return (
+      <ThemedView style={styles.container}>
+        <ThemedText>{error || 'Failed to process image'}</ThemedText>
+      </ThemedView>
+    );
+  }
 
-      TextRecognition.recognize(`file://${photoPath}`, 
-        TextRecognitionScript.JAPANESE
-      ).then(async (result) => {
-        setBlocks(result.blocks)
-      })
-    }, []
-  )
+  const screenWidth = Dimensions.get('window').width;
+  const screenHeight = Dimensions.get('window').height;
+  const scale = Math.min(
+    screenWidth / result.imageWidth,
+    screenHeight / result.imageHeight
+  );
 
-  // update overlay when blocks change
-  useEffect(() => {
-    (async() => {
-      let components = []
-      for (let [blockIndex, block] of blocks.entries()) {
-        for (let [lineIndex, line] of block.lines.entries()) {
-          if (line.frame === undefined) continue
-          if (line.frame.height <= imageDimensions.height * 0.01) continue
-          if (nonHiraganaRegex.test(line.text)) continue
-
-          const cleanText = line.text.replaceAll(/[|]/g, '')
-          components.push(
-            <TouchableOpacity 
-              style={{
-                position: 'absolute',
-                top: (line.frame.top / imageDimensions.height * 100 + '%') as DimensionValue,
-                left: (line.frame.left / imageDimensions.width * 100 + '%') as DimensionValue,
-                width: (line.frame.width / imageDimensions.width * 100 + '%') as DimensionValue,
-                height: (line.frame.height / imageDimensions.height * 100 + '%') as DimensionValue,
-                backgroundColor: 'grey',
-                opacity: 0.85,
-                padding: 0,
-                borderRadius: 6,
-                display: "flex",
-                flexDirection: "column",
-                justifyContent: "center",
-              }} 
-              key={`${blockIndex}-${lineIndex}`}
-              activeOpacity={1}
-              onPress={() => {handleTextPress(cleanText)}}
-            >
-              {
-                line.frame.width > line.frame.height ?
-                  <HorizontalFittingText 
-                  text={cleanText} 
-                  textStyle={{
-                    color: 'white'
-                  }}
-                  ></HorizontalFittingText> :
-                  <VerticalFittingText
-                  text={cleanText} 
-                  textStyle={{
-                    color: 'white'
-                  }}
-                  ></VerticalFittingText>
-              }
-            </TouchableOpacity>
-          )
-        }
-      }
-      setOverlay(
-        <>
-          {components}
-        </>
-      )
-    })()
-  }, [blocks, imageDimensions])
+  
 
   return (
-    <View style={styles.container}>
-      <Stack.Screen options={{ title: "Home Page", headerShown: false }} />
-      <View 
-        style={styles.imageContainer}
+    <ThemedView style={styles.container}>
+      <ReactNativeZoomableView
+        maxZoom={3}
+        minZoom={1}
+        zoomStep={0.5}
+        initialZoom={1}
+        bindToBorders={true}
+        style={styles.zoomView}
       >
-        <ReactNativeZoomableView
-          maxZoom={6}
-          minZoom={0.5}
-          visualTouchFeedbackEnabled={false}
-          bindToBorders={true}
-        >
-          <View style={[styles.imageWrapper, {width: imageDimensions.width * 0.2, height: imageDimensions.height * 0.2}]}>
-            <Image
-              source={{ uri: `file://${photoPath}` }}
-              style={styles.image}
-              />
-            {overlay}
-          </View>
-        </ReactNativeZoomableView>
+        <View style={styles.imageContainer}>
+          <Image
+            source={{ uri: photoPath }}
+            style={[
+              styles.image,
+              {
+                width: result.imageWidth * scale,
+                height: result.imageHeight * scale,
+              },
+            ]}
+            resizeMode="contain"
+          />
+          {result.blocks.map((block, index) => {
+            if (!block.boundingBox?.vertices || block.boundingBox.vertices.length < 4) {
+              return null;
+            }
+            
+            // Calculate width and height based on the actual text orientation
+            const width = Math.sqrt(
+              Math.pow(block.boundingBox.vertices[1].x - block.boundingBox.vertices[0].x, 2) +
+              Math.pow(block.boundingBox.vertices[1].y - block.boundingBox.vertices[0].y, 2)
+            );
+            const height = Math.sqrt(
+              Math.pow(block.boundingBox.vertices[2].x - block.boundingBox.vertices[1].x, 2) +
+              Math.pow(block.boundingBox.vertices[2].y - block.boundingBox.vertices[1].y, 2)
+            );
+
+            // Calculate rotation angle
+            const angle = Math.atan2(
+              block.boundingBox.vertices[1].y - block.boundingBox.vertices[0].y,
+              block.boundingBox.vertices[1].x - block.boundingBox.vertices[0].x
+            );
+
+            return (
+              <View
+                key={index}
+                style={[
+                  styles.textOverlay,
+                  {
+                    left: block.boundingBox.vertices[0].x * scale,
+                    top: block.boundingBox.vertices[0].y * scale,
+                    width: width * scale,
+                    height: height * scale,
+                    transform: [{ rotate: `${angle}rad` }],
+                  },
+                ]}
+              >
+                <ThemedText style={styles.overlayText}>{block.text}</ThemedText>
+              </View>
+            );
+          })}
+        </View>
+      </ReactNativeZoomableView>
+      <View style={styles.textContainer}>
+        <ThemedText>Confidence: {result.confidence.toFixed(1)}%</ThemedText>
       </View>
-      <View style={{flex: 1.2, backgroundColor: "white", borderRadius: 30, overflow: "hidden", marginVertical: "3%", display: isDetailsVisible ? "flex" : "none",}}>
-        <ScrollView horizontal>
-          <View style={{ padding: 20, flexDirection: 'column', justifyContent: 'center'}}>
-            {details}
-          </View>
-        </ScrollView>
-      </View>
-      <View style={styles.returnButtonContainer}>
-        <TouchableHighlight style={styles.returnButton} onPress={handleReturnButton}>
-          <Ionicons name="arrow-back-outline" size={60} color="white"/>
-        </TouchableHighlight>
-      </View>
-    </View>
+    </ThemedView>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    padding: 10,
-    paddingTop: 40,
-    backgroundColor: "black",
+  },
+  zoomView: {
+    flex: 1,
   },
   imageContainer: {
-    borderRadius: 30, 
-    overflow: "hidden", 
-    flex: 6
-  },
-  imageWrapper: {
-    borderRadius: 30,
-    overflow: "hidden"
+    position: 'relative',
   },
   image: {
-    width: "100%",
-    height: "100%",
-    resizeMode: "stretch"
+    resizeMode: 'contain',
+    width: '100%',
+    height: '100%',
   },
-  detailsContainer: {
-    
+  textOverlay: {
+    position: 'absolute',
+    borderWidth: 2,
+    borderColor: '#28a745',
+    backgroundColor: 'rgba(40, 167, 69, 0.1)',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
-  returnButtonContainer: {
-    flex: 1,
-    justifyContent: "center",
-    flexDirection: "row",
-    alignItems: "center"
+  overlayText: {
+    fontSize: 16,
+    textShadowColor: 'rgba(0, 0, 0, 0.75)',
+    textShadowOffset: { width: 1, height: 1 },
+    textShadowRadius: 2,
   },
-  returnButton: {
-    padding: 20,
-    backgroundColor: "grey",
-    height: 100,
-    borderRadius: 50
-  }
+  textContainer: {
+    padding: 16,
+    alignItems: 'center',
+  },
 });

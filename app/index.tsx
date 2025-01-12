@@ -1,64 +1,64 @@
 import { ThemedView } from "@/components/ThemedView";
-import { DarkTheme } from "@react-navigation/native";
-import { Redirect, Stack, useRouter } from "expo-router";
-import React from "react";
+import { Stack, useRouter } from "expo-router";
+import React, { useState } from "react";
 import { StyleSheet, Text, TouchableHighlight, View } from "react-native";
-import { Camera, CameraDevice, useCameraDevice, useCameraPermission } from "react-native-vision-camera";
+import { CameraView, useCameraPermissions } from 'expo-camera';
+import { CameraService } from "@/utils/camera";
 
-export default function HomePage(){
-  const { hasPermission } = useCameraPermission();
-  const redirectToPermissions = !hasPermission
-
-  const [device, setDevice] = React.useState<'front'|'back'>('back')
-  
-  const camera = React.useRef<Camera>(null);
+export default function HomePage() {
+  const [permission, requestPermission] = useCameraPermissions();
+  const camera = React.useRef<any>(null);
   const router = useRouter();
 
-  if(redirectToPermissions){
-    return <Redirect href={"/permissions"} />
-  }
-  if (!device)
-    return(
-      <ThemedView style={{flex: 1, alignItems: 'center', justifyContent: 'center'}}>
-        <Text>No available cameras</Text>
-      </ThemedView>
-    )
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
+  React.useEffect(() => {
+    if (permission === null) return;
+    if (!permission.granted) {
+      router.replace("/permissions");
+    }
+  }, [permission, router]);
+
+  if (!permission || !permission.granted) {
+    return null;
+  }
 
   const takePicture = async () => {
-    try{
-      if (camera.current == null) return alert("Camera is not found");
-      const photo = await camera.current.takePhoto({
-        enableShutterSound: true
-      })
+    try {
+      setIsLoading(true);
+      setError(null);
+      if (camera.current == null) throw new Error("Camera not initialized");
+      const photoUri = await CameraService.takePicture(camera.current);
+      if (!photoUri) throw new Error("Failed to take photo");
       router.push({
         pathname: "/viewer",
-        params: {photoPath: photo.path}
-      })
+        params: {photoPath: photoUri}
+      });
     } catch(e) {
-      console.error(e)
-      alert(`Error encountered: \n\n${e}`);
+      console.error(e);
+      setError(e instanceof Error ? e.message : "Failed to take photo");
+    } finally {
+      setIsLoading(false);
     }
   }
 
   return (
-    <View style = {styles.container}>
+    <View style={styles.container}>
       <Stack.Screen options={{ title: "Home Page", headerShown: false }} />
       <View style={{flex:6, borderRadius: 30, overflow: "hidden"}}>
-        <Camera 
+        <CameraView 
           style={{flex:1}} 
-          device={useCameraDevice(device) as CameraDevice} 
-          isActive 
-          ref={camera} 
-          photo
-          enableZoomGesture
+          facing="back"
+          ref={camera}
         >
           <View>
-            <Text>
-              {camera.current?.props.zoom}
+            <Text style={{color: 'white'}}>
+              {isLoading ? "Taking picture..." : ""}
+              {error ? error : ""}
             </Text>
           </View>
-        </Camera>
+        </CameraView>
       </View>
       <View style={{flex:1, alignItems: "center", flexDirection: "row", justifyContent: "space-evenly"}}>
         <TouchableHighlight style={styles.iconContainer} onPress={takePicture}>
@@ -71,29 +71,14 @@ export default function HomePage(){
 
 const styles = StyleSheet.create({
   container: {
-    flex: 1,
     backgroundColor: "black",
+    flex: 1,
   },
   iconContainer: {
+    backgroundColor: "white",
     borderRadius: 50,
-    width: 90,
     height: 90,
     padding: 15,
-    backgroundColor: "white",
+    width: 90,
   },
-})
-
-import {
-  getUnhandledPromiseRejectionTracker,
-  setUnhandledPromiseRejectionTracker,
-} from 'react-native-promise-rejection-utils';
- 
-const prevTracker = getUnhandledPromiseRejectionTracker()
- 
-setUnhandledPromiseRejectionTracker((id, error) => {
-  console.warn('Unhandled promise rejection!', id, error)
- 
-  if (prevTracker !== undefined) {
-    prevTracker(id, error)
-  }
-})
+});

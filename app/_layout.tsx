@@ -1,9 +1,12 @@
+import { ThemeProvider } from '@/contexts/ThemeContext';
 import { Stack } from "expo-router";
 
 export default function RootLayout() {
   return (
-    <Stack>
-      <Stack.Screen name="index" />
-    </Stack>
+    <ThemeProvider>
+      <Stack>
+        <Stack.Screen name="index" />
+      </Stack>
+    </ThemeProvider>
   );
 }
