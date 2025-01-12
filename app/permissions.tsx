@@ -1,5 +1,5 @@
-import * as React from "react";
 import { Stack, useRouter } from "expo-router";
+import * as React from "react";
 import {
   Alert,
   StyleSheet,
@@ -8,12 +8,11 @@ import {
   View,
 } from "react-native";
 
-import * as ExpoMediaLibrary from "expo-media-library";
 
 import { ThemedText } from "@/components/ThemedText";
 import { ThemedView } from "@/components/ThemedView";
-import { Camera, CameraPermissionStatus } from "react-native-vision-camera";
 import { Ionicons } from "@expo/vector-icons";
+import { Camera, CameraPermissionStatus } from "react-native-vision-camera";
 
 const ICON_SIZE = 26;
 
@@ -22,8 +21,8 @@ export default function PermissionsScreen() {
   const [cameraPermissionStatus, setCameraPermissionStatus] =
     React.useState<CameraPermissionStatus>("not-determined");
 
-  const [mediaLibraryPermission, requestMediaLibraryPermission] =
-    ExpoMediaLibrary.usePermissions();
+  // const [mediaLibraryPermission, requestMediaLibraryPermission] =
+  //   ExpoMediaLibrary.usePermissions();
 
   const requestCameraPermission = async () => {
     const permission = await Camera.requestCameraPermission();
@@ -32,8 +31,9 @@ export default function PermissionsScreen() {
 
   const handleContinueButton = () => {
     if (
-      cameraPermissionStatus === "granted" &&
-      mediaLibraryPermission?.granted
+      cameraPermissionStatus === "granted" 
+      // &&
+      // mediaLibraryPermission?.granted
     ) {
       router.replace("/");
     } else {
@@ -43,12 +43,12 @@ export default function PermissionsScreen() {
 
   return (
     <>
-      <Stack.Screen options={{ title: "Permissions" }} />
+      <Stack.Screen options={{ title: "Permissions", headerShown: false}} />
       <ThemedView style={styles.container}>
         <View style={styles.spacer} />
 
         <ThemedText type="subtitle" style={styles.subtitle}>
-          Kanjisnap needs access to the camera and your photo library to work properly.
+          Kanjisnap needs access to some permissions to work properly.
         </ThemedText>
 
         <View style={styles.spacer} />
@@ -81,7 +81,7 @@ export default function PermissionsScreen() {
 
         <View style={styles.spacer} />
 
-        <View
+        {/* <View
           style={StyleSheet.compose(styles.row, styles.permissionContainer)}
         >
           <Ionicons name="library-outline" color={"gray"} size={ICON_SIZE} style={styles.icon} />
@@ -95,7 +95,7 @@ export default function PermissionsScreen() {
             // @ts-ignore
             onChange={async () => await requestMediaLibraryPermission()}
           />
-        </View>
+        </View> */}
 
         <View style={styles.spacer} />
         <View style={styles.spacer} />
@@ -107,7 +107,7 @@ export default function PermissionsScreen() {
         >
           <Ionicons
             name="arrow-forward-outline"
-            color={"white"}
+            color={"grey"}
             size={ICON_SIZE}
           />
         </TouchableHighlight>
@@ -120,6 +120,7 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     padding: 20,
+    justifyContent: "center"
   },
   subtitle: {
     textAlign: "center",
@@ -149,7 +150,7 @@ const styles = StyleSheet.create({
   continueButton: {
     padding: 10,
     borderWidth: 2,
-    borderColor: "white",
+    borderColor: "grey",
     borderRadius: 50,
     alignSelf: "center",
   },

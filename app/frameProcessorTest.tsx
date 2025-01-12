@@ -51,9 +51,6 @@ export default function App() {
   }, []);
 
   const renderOverlay = () => {
-    console.log(
-      ocr?.result?.blocks.map(block => [block.text, JSON.stringify(block.boundingBox)]).join('\n'),
-    );
     return (
       <>
         {ocr?.result.blocks.map(block => {
